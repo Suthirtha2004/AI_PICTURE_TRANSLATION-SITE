@@ -1,0 +1,89 @@
+<!-- index.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Picture Translation App — Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>AI Picture Translation</h1>
+      <p class="lead">Upload or take a photo, select a region (Label Translator) and extract + translate text. Exports: PDF / DOCX.</p>
+
+      <label class="small">Image (photo / label / doc)</label>
+      <input id="fileInput" type="file" accept="image/*" />
+
+      <div id="preview">
+        <div style="text-align:center;color:var(--muted)">No image selected</div>
+        <canvas id="cropsel"></canvas>
+        <img id="img" alt="preview"/>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <div class="small">Mode: <span id="modeBadge" class="badge">Full OCR</span></div>
+        <div class="actions">
+          <button id="toggleSel" class="ghost">Toggle Label Selector</button>
+          <button id="doOCR">Run OCR</button>
+          <button id="clearBtn" class="ghost">Clear</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <label class="small">Target language</label>
+        <select id="targetLang">
+          <option value="en">English</option>
+          <option value="hi">Hindi</option>
+          <option value="bn">Bengali</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="auto">Auto (preserve)</option>
+        </select>
+        <div style="flex:1"></div>
+        <div class="small">Source language will be auto-detected</div>
+      </div>
+
+    </div>
+
+    <div class="card right-panel">
+      <div>
+        <div class="meta">
+          <div><strong>Extracted text</strong></div>
+          <div class="small">Confidence: <span id="conf">—</span></div>
+        </div>
+        <textarea id="extracted" placeholder="OCR results will appear here..."></textarea>
+      </div>
+
+      <div>
+        <div class="meta"><div><strong>Translated text</strong></div><div class="small">Detected: <span id="detected">—</span></div></div>
+        <textarea id="translated" placeholder="Translated results will appear here..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <div class="row">
+          <button id="translateBtn">Translate</button>
+          <button id="swapBtn" class="ghost">Swap</button>
+          <button id="copyBtn" class="ghost">Copy</button>
+        </div>
+        <div class="row">
+          <button id="exportPdf">Export PDF</button>
+          <button id="exportDocx" class="ghost">Export DOCX</button>
+        </div>
+      </div>
+
+      <div class="footer">Uses Tesseract.js for client-side OCR. Translations via LibreTranslate public endpoint by default — see comments for API/CORS notes.</div>
+    </div>
+  </div>
+
+  <!-- Libraries from CDN -->
+  <script src="https://unpkg.com/tesseract.js@v4.1.4/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://unpkg.com/docx@8.3.2/build/index.umd.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
+
