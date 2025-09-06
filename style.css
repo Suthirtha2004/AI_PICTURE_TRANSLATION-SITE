@@ -93,6 +93,8 @@ button.ghost {
   justify-content: center;
   overflow: hidden;
   position: relative;
+  flex-direction: column;
+  gap: 8px;
 }
 
 #preview img {
@@ -117,6 +119,13 @@ textarea {
   resize: vertical;
 }
 
+textarea[readonly] {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: default;
+  resize: none;
+}
+
 .row {
   display: flex;
   gap: 8px;
@@ -125,9 +134,16 @@ textarea {
 select {
   padding: 8px;
   border-radius: 8px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  color: inherit;
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e6eef8;
+  font-size: 13px;
+}
+
+select option {
+  background: var(--card);
+  color: #e6eef8;
+  padding: 8px;
 }
 
 .badge {
