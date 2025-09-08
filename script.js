@@ -90,17 +90,115 @@ document.getElementById("clearBtn").onclick = ()=>{
 document.getElementById("translateBtn").onclick = async ()=>{
   const text = extracted.value.trim();
   if(!text) return;
-  translated.value = "Translating...";
 
-  const res = await fetch("https://libretranslate.de/translate",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({q:text,source:"auto",target:targetLang.value,format:"text"})
-  });
-  const data = await res.json();
-  translated.value = data.translatedText;
-  detected.textContent = data.detectedLanguage?.toUpperCase() || "auto";
+  // If target is "auto", preserve original text and skip API
+  if(targetLang.value === "auto"){
+    translated.value = text;
+    detected.textContent = "auto";
+    return;
+  }
+
+  translated.value = "Translating...";
+  try {
+    const data = await translateWithFallback(text, targetLang.value);
+    translated.value = data.translatedText || "";
+    const det = (data.detectedLanguage || data.detected_language || "auto");
+    detected.textContent = (typeof det === "string" ? det : "auto").toUpperCase();
+  } catch(err){
+    console.error(err);
+    translated.value = "";
+    alert("Translation failed. Try again or switch language/endpoint.");
+  }
 };
+
+const TRANSLATE_ENDPOINTS = [
+  "https://libretranslate.de/translate",
+  "https://translate.argosopentech.com/translate",
+  "https://libretranslate.com/translate",
+  "https://libretranslate.org/translate",
+  "https://libretranslate.online/translate",
+  "https://translate.federalize.cloud/translate"
+];
+
+async function translateWithFallback(text, target){
+  let lastError;
+  for(const url of TRANSLATE_ENDPOINTS){
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(()=>controller.abort(), 12000);
+      const res = await fetch(url,{
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ q: text, source: "auto", target, format: "text" }),
+        signal: controller.signal
+      });
+      clearTimeout(t);
+      if(!res.ok){ lastError = new Error(`HTTP ${res.status} at ${url}`); continue; }
+      const data = await res.json();
+      if(!data || (!data.translatedText && !data.translated_text)){
+        lastError = new Error("Unexpected response format");
+        continue;
+      }
+      return { ...data, translatedText: data.translatedText || data.translated_text };
+    } catch(e){
+      lastError = e;
+      continue;
+    }
+  }
+  // Try MyMemory as a final fallback (CORS-friendly, rate-limited)
+  try {
+    const mm = await translateWithMyMemory(text, target);
+    return mm;
+  } catch(e){
+    // ignore, will throw below
+  }
+  throw lastError || new Error("All translation endpoints failed");
+}
+
+async function translateWithMyMemory(text, target){
+  const source = await detectLanguageWithFallback(text).catch(()=>"en");
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(source + '|' + target)}`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if(!res.ok) throw new Error("MyMemory HTTP " + res.status);
+  const data = await res.json();
+  const translatedText = data?.responseData?.translatedText;
+  if(!translatedText) throw new Error("MyMemory unexpected response");
+  const detectedLanguage = source;
+  return { translatedText, detectedLanguage };
+}
+
+// Gemini translation removed by user request; Gemini is used only for explanations in chatbot.js
+
+const DETECT_ENDPOINTS = TRANSLATE_ENDPOINTS.map(u=>u.replace(/\/translate$/, "/detect"));
+
+async function detectLanguageWithFallback(text){
+  let lastError;
+  for(const url of DETECT_ENDPOINTS){
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(()=>controller.abort(), 8000);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ q: text }),
+        signal: controller.signal
+      });
+      clearTimeout(t);
+      if(!res.ok){ lastError = new Error(`Detect HTTP ${res.status} at ${url}`); continue; }
+      const data = await res.json();
+      // LibreTranslate detect returns array of candidates [{language, confidence}]
+      const lang = Array.isArray(data) && data[0] && data[0].language ? data[0].language : null;
+      if(lang) return lang;
+      lastError = new Error("Detect unexpected response");
+    } catch(e){
+      lastError = e;
+      continue;
+    }
+  }
+  // naive fallback: if mostly ASCII, guess English; else Spanish as common fallback
+  const asciiRatio = (text.match(/[\x00-\x7F]/g) || []).length / Math.max(text.length,1);
+  return asciiRatio > 0.9 ? "en" : "es";
+}
 
 document.getElementById("swapBtn").onclick = ()=>{
   const tmp = extracted.value;

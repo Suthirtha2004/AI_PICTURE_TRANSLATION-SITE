@@ -84,6 +84,37 @@
   <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://unpkg.com/docx@8.3.2/build/index.umd.js"></script>
   <script src="script.js"></script>
+
+  <!-- Chatbot UI -->
+  <button id="chatbotToggle" aria-label="Explain translation" title="Explain translation">
+    🤖
+  </button>
+  <div id="chatbotPanel" aria-live="polite" aria-label="Translation assistant">
+    <div class="cb-header">
+      <div class="cb-title">Assistant</div>
+      <div class="row">
+        <button id="chatbotClose" class="ghost" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div id="chatbotSettings" class="cb-settings" style="display:none">
+      <label class="small">Gemini API Key</label>
+      <input id="geminiKey" type="password" placeholder="paste your key" />
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+        <label style="display:flex;gap:6px;align-items:center"><input id="useGeminiExplain" type="checkbox" /> Use Gemini for explanations</label>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button id="saveGemini" class="ghost">Save</button>
+        <button id="clearGemini" class="ghost">Clear</button>
+      </div>
+    </div>
+    <div id="chatHistory" class="cb-history"></div>
+    <div class="cb-input">
+      <input id="chatPrompt" type="text" placeholder="Ask about the translation..." />
+      <button id="chatSend">Send</button>
+    </div>
+  </div>
+  <script src="config.js"></script>
+  <script src="chatbot.js"></script>
 </body>
 </html>
 

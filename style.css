@@ -167,3 +167,100 @@ canvas#cropsel {
   text-align: center;
   margin-top: 8px;
 }
+
+/* Chatbot */
+#chatbotToggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  box-shadow: 0 8px 28px rgba(2,6,23,0.6);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  line-height: 1;
+  z-index: 1000;
+  background: radial-gradient(120% 120% at 30% 20%, #8b5cf6 0%, #5b21b6 60%, #3b0764 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+}
+
+#chatbotToggle:hover {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 12px 36px rgba(124, 58, 237, 0.45);
+  filter: saturate(1.2);
+}
+
+#chatbotToggle:active { transform: scale(0.98); }
+
+#chatbotPanel {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  width: 340px;
+  max-height: 60vh;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(2,6,23,0.7);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.cb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.cb-title { font-weight: 700; }
+
+.cb-history {
+  padding: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cb-msg {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+}
+.cb-msg.user { align-self: flex-end; background: rgba(124, 58, 237, 0.25); }
+.cb-msg.bot { align-self: flex-start; }
+
+.cb-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.cb-input input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: inherit;
+}
+
+.cb-settings {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-settings input[type="password"]{
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: inherit;
+}
