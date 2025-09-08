@@ -31,6 +31,11 @@ img.onload = () => {
   canvas.width = img.width;
   canvas.height = img.height;
   ctx.clearRect(0,0,canvas.width,canvas.height);
+  // Hide the "No image selected" text when image loads
+  const placeholder = document.getElementById("placeholder");
+  if (placeholder) {
+    placeholder.style.display = "none";
+  }
 };
 
 document.getElementById("toggleSel").onclick = () => {
@@ -77,133 +82,343 @@ document.getElementById("doOCR").onclick = async () => {
     cropData = tempCanvas.toDataURL();
   }
 
-  const { data: { text, confidence } } = await Tesseract.recognize(cropData,"eng");
-  extracted.value = text.trim();
-  conf.textContent = confidence.toFixed(1)+"%";
+  try {
+    // Preprocess image for better OCR results
+    const processedImage = await preprocessImage(cropData);
+    
+    let bestResult = { text: '', confidence: 0 };
+    
+    // Try multiple OCR strategies for all languages
+    const strategies = [
+      // Bengali strategies
+      {
+        name: "Bengali Handwritten",
+        lang: "ben",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'অআইঈউঊঋএঐওঔকখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহক্ষত্রজ্ঞ।,'
+        }
+      },
+      {
+        name: "Bengali Single Block",
+        lang: "ben",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "Bengali Single Line",
+        lang: "ben",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_TEXT_LINE,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // Hindi strategies
+      {
+        name: "Hindi Handwritten",
+        lang: "hin",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञ।,'
+        }
+      },
+      {
+        name: "Hindi Single Block",
+        lang: "hin",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "Hindi Single Line",
+        lang: "hin",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_TEXT_LINE,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // Spanish strategies
+      {
+        name: "Spanish Handwritten",
+        lang: "spa",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzñáéíóúü¿¡.,;:!?()[]{}'
+        }
+      },
+      {
+        name: "Spanish Single Block",
+        lang: "spa",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "Spanish Single Line",
+        lang: "spa",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_TEXT_LINE,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // French strategies
+      {
+        name: "French Handwritten",
+        lang: "fra",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzàâäçéèêëïîôöùûüÿ.,;:!?()[]{}'
+        }
+      },
+      {
+        name: "French Single Block",
+        lang: "fra",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "French Single Line",
+        lang: "fra",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_TEXT_LINE,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // German strategies
+      {
+        name: "German Handwritten",
+        lang: "deu",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzäöüß.,;:!?()[]{}'
+        }
+      },
+      {
+        name: "German Single Block",
+        lang: "deu",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "German Single Line",
+        lang: "deu",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_TEXT_LINE,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // Multi-language strategies
+      {
+        name: "Multi-language All",
+        lang: "eng+hin+ben+spa+fra+deu",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "Multi-language Block",
+        lang: "eng+hin+ben+spa+fra+deu",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      // English strategies
+      {
+        name: "English Handwritten",
+        lang: "eng",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      },
+      {
+        name: "English Single Block",
+        lang: "eng",
+        options: {
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        }
+      }
+    ];
+    
+    console.log("Trying multiple OCR strategies for all languages...");
+    
+    // First, try to detect the most likely language from the image
+    const detectedLang = detectLanguageFromImage(processedImage);
+    console.log("Detected likely language from image:", detectedLang);
+    
+    // Reorder strategies to prioritize detected language
+    const prioritizedStrategies = prioritizeStrategies(strategies, detectedLang);
+    
+    for (let strategy of prioritizedStrategies) {
+      try {
+        console.log(`Trying strategy: ${strategy.name}`);
+        const { data: { text, confidence } } = await Tesseract.recognize(processedImage, strategy.lang, {
+          logger: m => console.log(m),
+          ...strategy.options
+        });
+        
+        console.log(`${strategy.name} result:`, { text: text.trim(), confidence });
+        
+        // Choose the best result based on confidence and text length
+        if (confidence > bestResult.confidence || 
+            (confidence > bestResult.confidence * 0.8 && text.trim().length > bestResult.text.length)) {
+          bestResult = { text: text.trim(), confidence };
+          console.log(`New best result from ${strategy.name}:`, bestResult);
+        }
+      } catch (error) {
+        console.warn(`Strategy ${strategy.name} failed:`, error);
+      }
+    }
+    
+    // If we still don't have good results, try the original image without preprocessing
+    if (bestResult.confidence < 30 || bestResult.text.length < 20) {
+      console.log("Trying original image without preprocessing...");
+      
+      // Try all languages in fallback order
+      const fallbackStrategies = [
+        { lang: "ben", name: "Bengali Original" },
+        { lang: "hin", name: "Hindi Original" },
+        { lang: "spa", name: "Spanish Original" },
+        { lang: "fra", name: "French Original" },
+        { lang: "deu", name: "German Original" },
+        { lang: "eng", name: "English Original" },
+        { lang: "eng+hin+ben+spa+fra+deu", name: "Multi-lang Original" }
+      ];
+      
+      for (let fallback of fallbackStrategies) {
+        try {
+          const { data: { text, confidence } } = await Tesseract.recognize(cropData, fallback.lang, {
+            logger: m => console.log(m),
+            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+            tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300'
+          });
+          
+          if (confidence > bestResult.confidence || text.trim().length > bestResult.text.length) {
+            bestResult = { text: text.trim(), confidence };
+            console.log(`${fallback.name} gave better results:`, bestResult);
+          }
+        } catch (error) {
+          console.warn(`${fallback.name} failed:`, error);
+        }
+      }
+    }
+    
+    // Set the best result
+    extracted.value = bestResult.text;
+    conf.textContent = bestResult.confidence.toFixed(1) + "%";
+    
+    console.log("Final OCR result:", bestResult);
+    
+  } catch (error) {
+    console.error("OCR Error:", error);
+    extracted.value = "OCR failed. Please try again.";
+    conf.textContent = "ERROR";
+  }
 };
 
 document.getElementById("clearBtn").onclick = ()=>{
   extracted.value = translated.value = "";
   conf.textContent = detected.textContent = "—";
+  // Show the "No image selected" text when clearing
+  const placeholder = document.getElementById("placeholder");
+  if (placeholder) {
+    placeholder.style.display = "flex";
+  }
+  // Clear the image and file input
+  img.src = "";
+  fileInput.value = "";
+  imgDataUrl = null;
+  // Clear the canvas
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 };
 
 document.getElementById("translateBtn").onclick = async ()=>{
   const text = extracted.value.trim();
   if(!text) return;
-
-  // If target is "auto", preserve original text and skip API
-  if(targetLang.value === "auto"){
-    translated.value = text;
-    detected.textContent = "auto";
-    return;
-  }
-
   translated.value = "Translating...";
-  try {
-    const data = await translateWithFallback(text, targetLang.value);
-    translated.value = data.translatedText || "";
-    const det = (data.detectedLanguage || data.detected_language || "auto");
-    detected.textContent = (typeof det === "string" ? det : "auto").toUpperCase();
-  } catch(err){
-    console.error(err);
-    translated.value = "";
-    alert("Translation failed. Try again or switch language/endpoint.");
-  }
-};
 
-const TRANSLATE_ENDPOINTS = [
-  "https://libretranslate.de/translate",
-  "https://translate.argosopentech.com/translate",
-  "https://libretranslate.com/translate",
-  "https://libretranslate.org/translate",
-  "https://libretranslate.online/translate",
-  "https://translate.federalize.cloud/translate"
-];
-
-async function translateWithFallback(text, target){
-  let lastError;
-  for(const url of TRANSLATE_ENDPOINTS){
-    try {
-      const controller = new AbortController();
-      const t = setTimeout(()=>controller.abort(), 12000);
-      const res = await fetch(url,{
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ q: text, source: "auto", target, format: "text" }),
-        signal: controller.signal
-      });
-      clearTimeout(t);
-      if(!res.ok){ lastError = new Error(`HTTP ${res.status} at ${url}`); continue; }
-      const data = await res.json();
-      if(!data || (!data.translatedText && !data.translated_text)){
-        lastError = new Error("Unexpected response format");
-        continue;
-      }
-      return { ...data, translatedText: data.translatedText || data.translated_text };
-    } catch(e){
-      lastError = e;
-      continue;
-    }
-  }
-  // Try MyMemory as a final fallback (CORS-friendly, rate-limited)
-  try {
-    const mm = await translateWithMyMemory(text, target);
-    return mm;
-  } catch(e){
-    // ignore, will throw below
-  }
-  throw lastError || new Error("All translation endpoints failed");
-}
-
-async function translateWithMyMemory(text, target){
-  const source = await detectLanguageWithFallback(text).catch(()=>"en");
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(source + '|' + target)}`;
-  const res = await fetch(url, { headers: { "Accept": "application/json" } });
-  if(!res.ok) throw new Error("MyMemory HTTP " + res.status);
+  const res = await fetch("https://libretranslate.de/translate",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({q:text,source:"auto",target:targetLang.value,format:"text"})
+  });
   const data = await res.json();
-  const translatedText = data?.responseData?.translatedText;
-  if(!translatedText) throw new Error("MyMemory unexpected response");
-  const detectedLanguage = source;
-  return { translatedText, detectedLanguage };
-}
-
-// Gemini translation removed by user request; Gemini is used only for explanations in chatbot.js
-
-const DETECT_ENDPOINTS = TRANSLATE_ENDPOINTS.map(u=>u.replace(/\/translate$/, "/detect"));
-
-async function detectLanguageWithFallback(text){
-  let lastError;
-  for(const url of DETECT_ENDPOINTS){
-    try {
-      const controller = new AbortController();
-      const t = setTimeout(()=>controller.abort(), 8000);
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ q: text }),
-        signal: controller.signal
-      });
-      clearTimeout(t);
-      if(!res.ok){ lastError = new Error(`Detect HTTP ${res.status} at ${url}`); continue; }
-      const data = await res.json();
-      // LibreTranslate detect returns array of candidates [{language, confidence}]
-      const lang = Array.isArray(data) && data[0] && data[0].language ? data[0].language : null;
-      if(lang) return lang;
-      lastError = new Error("Detect unexpected response");
-    } catch(e){
-      lastError = e;
-      continue;
-    }
-  }
-  // naive fallback: if mostly ASCII, guess English; else Spanish as common fallback
-  const asciiRatio = (text.match(/[\x00-\x7F]/g) || []).length / Math.max(text.length,1);
-  return asciiRatio > 0.9 ? "en" : "es";
-}
+  translated.value = data.translatedText;
+  detected.textContent = data.detectedLanguage?.toUpperCase() || "auto";
+};
 
 document.getElementById("swapBtn").onclick = ()=>{
   const tmp = extracted.value;
   extracted.value = translated.value;
   translated.value = tmp;
+  // Update the readonly textareas by temporarily removing readonly, updating, then restoring
+  const extractedTextarea = document.getElementById("extracted");
+  const translatedTextarea = document.getElementById("translated");
+  
+  extractedTextarea.removeAttribute('readonly');
+  translatedTextarea.removeAttribute('readonly');
+  
+  extractedTextarea.value = translated.value;
+  translatedTextarea.value = tmp;
+  
+  extractedTextarea.setAttribute('readonly', '');
+  translatedTextarea.setAttribute('readonly', '');
 };
 
 document.getElementById("copyBtn").onclick = ()=>{

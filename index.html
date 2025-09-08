@@ -17,7 +17,10 @@
       <input id="fileInput" type="file" accept="image/*" />
 
       <div id="preview">
-        <div style="text-align:center;color:var(--muted)">No image selected</div>
+        <div id="placeholder" style="text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:8px">
+          <div>📷</div>
+          <div>No image selected</div>
+        </div>
         <canvas id="cropsel"></canvas>
         <img id="img" alt="preview"/>
       </div>
@@ -54,12 +57,12 @@
           <div><strong>Extracted text</strong></div>
           <div class="small">Confidence: <span id="conf">—</span></div>
         </div>
-        <textarea id="extracted" placeholder="OCR results will appear here..."></textarea>
+        <textarea id="extracted" placeholder="OCR results will appear here..." readonly></textarea>
       </div>
 
       <div>
         <div class="meta"><div><strong>Translated text</strong></div><div class="small">Detected: <span id="detected">—</span></div></div>
-        <textarea id="translated" placeholder="Translated results will appear here..."></textarea>
+        <textarea id="translated" placeholder="Translated results will appear here..." readonly></textarea>
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
