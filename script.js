@@ -67,6 +67,44 @@ function drawSelection(){
   ctx.strokeRect(startX,startY,endX-startX,endY-startY);
 }
 
+// Simple image preprocessing to improve OCR (grayscale + threshold)
+async function preprocessImage(dataUrl){
+  return new Promise(resolve => {
+    const im = new Image();
+    im.onload = () => {
+      const t = document.createElement("canvas");
+      t.width = im.width; t.height = im.height;
+      const c = t.getContext("2d");
+      c.drawImage(im,0,0);
+      const imgData = c.getImageData(0,0,t.width,t.height);
+      const d = imgData.data;
+      for(let i=0;i<d.length;i+=4){
+        const r=d[i], g=d[i+1], b=d[i+2];
+        const gray = (r*0.299 + g*0.587 + b*0.114);
+        const v = gray > 180 ? 255 : 0;
+        d[i]=d[i+1]=d[i+2]=v; // binarize
+      }
+      c.putImageData(imgData,0,0);
+      resolve(t.toDataURL());
+    };
+    im.src = dataUrl;
+  });
+}
+
+// Naive language guesser placeholder (can be enhanced later)
+function detectLanguageFromImage(){
+  return "eng";
+}
+
+function prioritizeStrategies(strategies, lang){
+  if(!lang) return strategies;
+  return [...strategies].sort((a,b)=>{
+    const am = a.lang && a.lang.includes(lang) ? 0 : 1;
+    const bm = b.lang && b.lang.includes(lang) ? 0 : 1;
+    return am - bm;
+  });
+}
+
 // Run OCR
 document.getElementById("doOCR").onclick = async () => {
   if (!imgDataUrl) return alert("Upload an image first");
@@ -391,17 +429,106 @@ document.getElementById("clearBtn").onclick = ()=>{
 document.getElementById("translateBtn").onclick = async ()=>{
   const text = extracted.value.trim();
   if(!text) return;
-  translated.value = "Translating...";
 
-  const res = await fetch("https://libretranslate.de/translate",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({q:text,source:"auto",target:targetLang.value,format:"text"})
-  });
-  const data = await res.json();
-  translated.value = data.translatedText;
-  detected.textContent = data.detectedLanguage?.toUpperCase() || "auto";
+  // If target is "auto", preserve original text and skip API
+  if(targetLang.value === "auto"){
+    translated.value = text;
+    detected.textContent = "auto";
+    return;
+  }
+
+  translated.value = "Translating...";
+  try {
+    const data = await translateWithFallback(text, targetLang.value);
+    translated.value = data.translatedText || "";
+    const det = (data.detectedLanguage || data.detected_language || "auto");
+    detected.textContent = (typeof det === "string" ? det : "auto").toUpperCase();
+  } catch(err){
+    console.error(err);
+    translated.value = "";
+    alert("Translation failed. Try again or switch language.");
+  }
 };
+
+const TRANSLATE_ENDPOINTS = [
+  "https://libretranslate.de/translate",
+  "https://translate.argosopentech.com/translate",
+  "https://libretranslate.com/translate",
+  "https://libretranslate.org/translate",
+  "https://libretranslate.online/translate",
+  "https://translate.federalize.cloud/translate"
+];
+
+async function translateWithFallback(text, target){
+  let lastError;
+  for(const url of TRANSLATE_ENDPOINTS){
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(()=>controller.abort(), 12000);
+      const res = await fetch(url,{
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ q: text, source: "auto", target, format: "text" }),
+        signal: controller.signal
+      });
+      clearTimeout(t);
+      if(!res.ok){ lastError = new Error(`HTTP ${res.status} at ${url}`); continue; }
+      const data = await res.json();
+      if(!data || (!data.translatedText && !data.translated_text)){
+        lastError = new Error("Unexpected response format");
+        continue;
+      }
+      return { ...data, translatedText: data.translatedText || data.translated_text };
+    } catch(e){
+      lastError = e;
+      continue;
+    }
+  }
+  // Final fallback: MyMemory with detected source (does not accept 'auto')
+  try {
+    const mm = await translateWithMyMemory(text, target);
+    return mm;
+  } catch(e){ /* ignore */ }
+  throw lastError || new Error("All translation endpoints failed");
+}
+
+const DETECT_ENDPOINTS = TRANSLATE_ENDPOINTS.map(u=>u.replace(/\/translate$/, "/detect"));
+
+async function detectLanguageWithFallback(text){
+  let lastError;
+  for(const url of DETECT_ENDPOINTS){
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(()=>controller.abort(), 8000);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ q: text }),
+        signal: controller.signal
+      });
+      clearTimeout(t);
+      if(!res.ok){ lastError = new Error(`Detect HTTP ${res.status} at ${url}`); continue; }
+      const data = await res.json();
+      const lang = Array.isArray(data) && data[0] && data[0].language ? data[0].language : null;
+      if(lang) return lang;
+      lastError = new Error("Detect unexpected response");
+    } catch(e){ lastError = e; continue; }
+  }
+  const asciiRatio = (text.match(/[\x00-\x7F]/g) || []).length / Math.max(text.length,1);
+  return asciiRatio > 0.9 ? "en" : "es";
+}
+
+async function translateWithMyMemory(text, target){
+  const source = await detectLanguageWithFallback(text).catch(()=>"en");
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(source + '|' + target)}`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if(!res.ok) throw new Error("MyMemory HTTP " + res.status);
+  const data = await res.json();
+  const translatedText = data?.responseData?.translatedText;
+  if(!translatedText) throw new Error("MyMemory unexpected response");
+  const detectedLanguage = source;
+  return { translatedText, detectedLanguage };
+}
 
 document.getElementById("swapBtn").onclick = ()=>{
   const tmp = extracted.value;
