@@ -339,13 +339,15 @@ document.getElementById("doOCR").onclick = async () => {
     console.log("Detected likely language from image:", detectedLang);
     
     // Reorder strategies to prioritize detected language
-    const prioritizedStrategies = prioritizeStrategies(strategies, detectedLang);
+    let prioritizedStrategies = prioritizeStrategies(strategies, detectedLang);
+    // speed: only try up to 3 strategies
+    prioritizedStrategies = prioritizedStrategies.slice(0, 3);
     
     for (let strategy of prioritizedStrategies) {
       try {
         console.log(`Trying strategy: ${strategy.name}`);
         const { data: { text, confidence } } = await Tesseract.recognize(processedImage, strategy.lang, {
-          logger: m => console.log(m),
+          // disable verbose logs for speed
           ...strategy.options
         });
         
@@ -357,43 +359,29 @@ document.getElementById("doOCR").onclick = async () => {
           bestResult = { text: text.trim(), confidence };
           console.log(`New best result from ${strategy.name}:`, bestResult);
         }
+        // If we already have a strong result, stop early
+        if (bestResult.confidence >= 70 && bestResult.text.length >= 3) break;
       } catch (error) {
         console.warn(`Strategy ${strategy.name} failed:`, error);
       }
     }
     
     // If we still don't have good results, try the original image without preprocessing
-    if (bestResult.confidence < 30 || bestResult.text.length < 20) {
+    if (bestResult.confidence < 30 || bestResult.text.length < 4) {
       console.log("Trying original image without preprocessing...");
-      
-      // Try all languages in fallback order
-      const fallbackStrategies = [
-        { lang: "ben", name: "Bengali Original" },
-        { lang: "hin", name: "Hindi Original" },
-        { lang: "spa", name: "Spanish Original" },
-        { lang: "fra", name: "French Original" },
-        { lang: "deu", name: "German Original" },
-        { lang: "eng", name: "English Original" },
-        { lang: "eng+hin+ben+spa+fra+deu", name: "Multi-lang Original" }
-      ];
-      
-      for (let fallback of fallbackStrategies) {
-        try {
-          const { data: { text, confidence } } = await Tesseract.recognize(cropData, fallback.lang, {
-            logger: m => console.log(m),
-            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-            tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
-            preserve_interword_spaces: '1',
-            user_defined_dpi: '300'
-          });
-          
-          if (confidence > bestResult.confidence || text.trim().length > bestResult.text.length) {
-            bestResult = { text: text.trim(), confidence };
-            console.log(`${fallback.name} gave better results:`, bestResult);
-          }
-        } catch (error) {
-          console.warn(`${fallback.name} failed:`, error);
+      try {
+        const { data: { text, confidence } } = await Tesseract.recognize(cropData, "eng+hin+ben", {
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
+        });
+        if (confidence > bestResult.confidence || text.trim().length > bestResult.text.length) {
+          bestResult = { text: text.trim(), confidence };
+          console.log(`Multilang Original gave better results:`, bestResult);
         }
+      } catch (error) {
+        console.warn(`Multilang Original failed:`, error);
       }
     }
     
@@ -439,7 +427,9 @@ document.getElementById("translateBtn").onclick = async ()=>{
 
   translated.value = "Translating...";
   try {
-    const data = await translateWithFallback(text, targetLang.value);
+    // Ensure we send UTF-8 and avoid mojibake by normalizing text
+    const normalized = text.normalize('NFC');
+    const data = await translateWithFallback(normalized, targetLang.value);
     translated.value = data.translatedText || "";
     const det = (data.detectedLanguage || data.detected_language || "auto");
     detected.textContent = (typeof det === "string" ? det : "auto").toUpperCase();
@@ -451,6 +441,7 @@ document.getElementById("translateBtn").onclick = async ()=>{
 };
 
 const TRANSLATE_ENDPOINTS = [
+  "https://translate.fedified.com/translate",
   "https://libretranslate.de/translate",
   "https://translate.argosopentech.com/translate",
   "https://libretranslate.com/translate",
@@ -459,7 +450,34 @@ const TRANSLATE_ENDPOINTS = [
   "https://translate.federalize.cloud/translate"
 ];
 
-async function translateWithFallback(text, target){
+function splitTextIntoChunks(text, maxLen = 480){
+  const sentences = text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[\.!?\u0964])(\s+)/g) // include Devanagari danda \u0964
+    .filter(Boolean);
+  const chunks = [];
+  let current = '';
+  for(const part of sentences){
+    if((current + part).length <= maxLen){
+      current += part;
+    } else {
+      if(current) chunks.push(current.trim());
+      if(part.length > maxLen){
+        // hard split very long segment
+        for(let i=0;i<part.length;i+=maxLen){
+          chunks.push(part.slice(i, i+maxLen));
+        }
+        current = '';
+      } else {
+        current = part;
+      }
+    }
+  }
+  if(current) chunks.push(current.trim());
+  return chunks.length ? chunks : [text];
+}
+
+async function translateSingleChunk(text, target){
   let lastError;
   for(const url of TRANSLATE_ENDPOINTS){
     try {
@@ -492,6 +510,17 @@ async function translateWithFallback(text, target){
   throw lastError || new Error("All translation endpoints failed");
 }
 
+async function translateWithFallback(text, target){
+  // Automatically chunk to avoid API limits; concatenate results
+  const chunks = splitTextIntoChunks(text, 480);
+  const out = [];
+  for(const chunk of chunks){
+    const r = await translateSingleChunk(chunk, target);
+    out.push(r.translatedText || '');
+  }
+  return { translatedText: out.join(' ').trim(), detectedLanguage: undefined };
+}
+
 const DETECT_ENDPOINTS = TRANSLATE_ENDPOINTS.map(u=>u.replace(/\/translate$/, "/detect"));
 
 async function detectLanguageWithFallback(text){
@@ -514,6 +543,15 @@ async function detectLanguageWithFallback(text){
       lastError = new Error("Detect unexpected response");
     } catch(e){ lastError = e; continue; }
   }
+  // Heuristics when network detect fails: map by Unicode script ranges
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+  if (hasDevanagari) return "hi"; // Hindi / Devanagari
+  const hasBengali = /[\u0980-\u09FF]/.test(text);
+  if (hasBengali) return "bn"; // Bengali
+  const hasArabic = /[\u0600-\u06FF]/.test(text);
+  if (hasArabic) return "ar";
+  const hasCyrillic = /[\u0400-\u04FF]/.test(text);
+  if (hasCyrillic) return "ru";
   const asciiRatio = (text.match(/[\x00-\x7F]/g) || []).length / Math.max(text.length,1);
   return asciiRatio > 0.9 ? "en" : "es";
 }
